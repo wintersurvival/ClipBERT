@@ -10,7 +10,7 @@ done
 BLOB='https://convaisharables.blob.core.windows.net/clipbert'
 
 # vis dbs
-for DATASET in 'vg' 'coco_test2015' 'coco_train2014_val2014'; do        
+for DATASET in 'vg' 'coco_train2014_val2014' 'coco_test2015'; do        
     if [ ! -d $DOWNLOAD/vis_db/$DATASET ] ; then
         wget -nc $BLOB/vis_db/$DATASET.tar -P $DOWNLOAD/vis_db/
         mkdir -p $DOWNLOAD/vis_db/$DATASET
