@@ -144,6 +144,7 @@ def extract_frames_from_video_binary(
     # (T, H, W, C) -> (T, C, H, W)
     if frames is not None:
         frames = frames.permute(0, 3, 1, 2)
+    video_container.close()
     return frames, video_max_pts
 
 
