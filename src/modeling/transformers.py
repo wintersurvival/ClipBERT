@@ -29,7 +29,8 @@ from transformers.configuration_bert import BertConfig
 from transformers.file_utils import (
     add_start_docstrings, add_start_docstrings_to_callable)
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
-from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+#from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+from torch.nn import LayerNorm
 
 
 logger = logging.getLogger(__name__)

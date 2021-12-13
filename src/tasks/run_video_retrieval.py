@@ -31,7 +31,6 @@ import numpy as np
 from tqdm import tqdm
 from os.path import join, exists
 from easydict import EasyDict as edict
-from apex import amp
 from torch.utils.data.distributed import DistributedSampler
 import horovod.torch as hvd
 from src.utils.distributed import all_gather_list
@@ -282,8 +281,8 @@ def start_training(cfg):
 
     n_gpu = hvd.size()
     cfg.n_gpu = n_gpu
-    device = torch.device("cuda", hvd.local_rank())
-    torch.cuda.set_device(hvd.local_rank())
+    device = torch.device("cpu", hvd.local_rank())
+    #torch.cuda.set_device(hvd.local_rank())
     if hvd.rank() != 0:
         LOGGER.disabled = True
     LOGGER.info("device: {} n_gpu: {}, rank: {}, "
@@ -303,7 +302,12 @@ def start_training(cfg):
     #  Horovod: broadcast parameters & optimizer state.
     hvd.broadcast_parameters(model.state_dict(), root_rank=0)
     hvd.broadcast_optimizer_state(optimizer, root_rank=0)
-
+    print("parameters:", sum(param.numel() for param in model.parameters()))
+    print("buffers:", sum(param.numel() for param in model.buffers()))
+    for name, param in model.named_parameters():
+        print(name, param.shape, param.numel())
+    for name, param in model.named_buffers():
+        print(name, param.shape, param.numel())
     model, optimizer = amp.initialize(
         model, optimizer, enabled=cfg.fp16, opt_level='O2',
         keep_batchnorm_fp32=True)

@@ -9,8 +9,8 @@ OUTPUT_DIR=/pretrain
 #    --output_dir $OUTPUT_DIR
 
 # 1 GPU
-nohup horovodrun -np 1 python -u src/pretrain/run_pretrain.py \
+horovodrun -np 1 python -u src/pretrain/run_pretrain.py \
     --config src/configs/pretrain_image_text_base_resnet50_mlm_itm.json \
     --gradient_accumulation_steps 16 \
-    &> pretrain_1v100.log &
+#    &> pretrain_cpu.log &
 

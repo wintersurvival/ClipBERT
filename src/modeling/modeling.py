@@ -9,8 +9,8 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .transformers import BertPreTrainedModel
 from .transformers import (
     BertPreTrainingHeads, BertEmbeddings, BertEncoder, BertPooler)
-from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
-
+#from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+from torch.nn import LayerNorm
 
 def get_random_sample_indices(
         seq_len, num_samples=100, device=torch.device("cpu")):

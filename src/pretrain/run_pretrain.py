@@ -25,7 +25,7 @@ from src.optimization.utils import setup_e2e_optimizer
 from collections import defaultdict
 from tqdm import tqdm
 from os.path import join
-from apex import amp
+#from apex import amp
 from torch.utils.data.distributed import DistributedSampler
 import horovod.torch as hvd
 from src.utils.distributed import all_gather_list
@@ -187,7 +187,7 @@ def setup_model(cfg, device=None):
 
     if cfg.freeze_cnn:
         model.freeze_cnn_backbone()
-    model.to(device)
+    #model.to(device)
 
     LOGGER.info("Setup model done!")
     return model
@@ -279,7 +279,7 @@ def start_training():
 
     n_gpu = hvd.size()
     device = torch.device("cuda", hvd.local_rank())
-    torch.cuda.set_device(hvd.local_rank())
+    #torch.cuda.set_device(hvd.local_rank())
     if hvd.rank() != 0:
         LOGGER.disabled = True
     LOGGER.info(f"device: {device} n_gpu: {n_gpu}, "
@@ -287,9 +287,13 @@ def start_training():
 
     model = setup_model(cfg, device=device)
     model.train()
-
+    print("parameters:", sum(param.numel() for param in model.parameters()))
+    print("buffers:", sum(param.numel() for param in model.buffers()))
+    for name, param in model.named_parameters():
+        print(name, param.shape, param.numel())
+    for name, param in model.named_buffers():
+        print(name, param.shape, param.numel())
     optimizer = setup_e2e_optimizer(model, cfg)
-
     # Horovod: (optional) compression algorithm.compressin
     compression = hvd.Compression.none
     optimizer = hvd.DistributedOptimizer(

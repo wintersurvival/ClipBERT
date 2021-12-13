@@ -39,7 +39,7 @@ class GridFeatBackbone(nn.Module):
                  input_format="BGR"):
         super(GridFeatBackbone, self).__init__()
         self.detectron2_cfg = self.__setup__(detectron2_model_cfg)
-        self.feature = build_model(self.detectron2_cfg)
+        self.backbone = build_model(self.detectron2_cfg).backbone
         self.grid_encoder = nn.Sequential(
             conv3x3(config.backbone_channel_in_size,
                     config.hidden_size),
@@ -76,7 +76,7 @@ class GridFeatBackbone(nn.Module):
                 self.feature).resume_or_load(
                     self.detectron2_cfg.MODEL.WEIGHTS, resume=True)
         else:
-            DetectionCheckpointer(self.feature).resume_or_load(
+            DetectionCheckpointer(self.backbone).resume_or_load(
                     model_path, resume=True)
 
     @property
@@ -92,9 +92,8 @@ class GridFeatBackbone(nn.Module):
         if self.input_format == "BGR":
             # RGB->BGR, images are read in as RGB by default
             x = x[:, [2, 1, 0], :, :]
-        res5_features = self.feature.backbone(x)
-        grid_feat_outputs = self.feature.roi_heads.get_conv5_features(
-            res5_features)
+        res5_features = self.backbone(x)
+        grid_feat_outputs = res5_features["res5"]
 
         grid = self.grid_encoder(grid_feat_outputs)  # (B * n_frm, C, H, W)
         new_c, new_h, new_w = grid.shape[-3:]
