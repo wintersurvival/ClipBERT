@@ -24,12 +24,11 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.activations import gelu, gelu_new, swish
+from transformers.activations import gelu, gelu_new
 from transformers.configuration_bert import BertConfig
 from transformers.file_utils import (
     add_start_docstrings, add_start_docstrings_to_callable)
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
-from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 
 
 logger = logging.getLogger(__name__)
@@ -141,11 +140,10 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu,
-          "swish": swish, "gelu_new": gelu_new, "mish": mish}
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu}
 
 
-BertLayerNorm = LayerNorm
+BertLayerNorm = torch.nn.LayerNorm
 
 
 class BertEmbeddings(nn.Module):
@@ -240,6 +238,7 @@ class BertSelfAttention(nn.Module):
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
+
         if encoder_hidden_states is not None:
             mixed_key_layer = self.key(encoder_hidden_states)
             mixed_value_layer = self.value(encoder_hidden_states)

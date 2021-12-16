@@ -9,7 +9,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .transformers import BertPreTrainedModel
 from .transformers import (
     BertPreTrainingHeads, BertEmbeddings, BertEncoder, BertPooler)
-from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 
 
 def get_random_sample_indices(
@@ -24,17 +23,12 @@ def get_random_sample_indices(
         1D torch.LongTensor consisting of sorted sample indices
         (sort should not affect the results as we use transformers)
     """
-    if num_samples >= seq_len:
-        # return all indices
-        sample_indices = np.arange(seq_len)
-    else:
-        sample_indices = np.random.choice(
-            seq_len, size=num_samples, replace=False)
-        sample_indices = np.sort(sample_indices)
-    return torch.from_numpy(sample_indices).long().to(device)
+    r = torch.rand(seq_len)
+    _, sampled_indices=torch.topk(r, num_samples, dim=0, largest=True, sorted=True)
+    return sampled_indices.long()
 
 
-BertLayerNorm = LayerNorm
+BertLayerNorm = torch.nn.LayerNorm
 
 
 class VisualInputEmbedding(nn.Module):

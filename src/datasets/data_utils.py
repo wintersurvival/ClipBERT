@@ -257,8 +257,8 @@ class ImageNorm(object):
     """Apply Normalization to Image Pixels on GPU
     """
     def __init__(self, mean, std):
-        self.mean = torch.tensor(mean).cuda().view(1, 1, 3, 1, 1)
-        self.std = torch.tensor(std).cuda().view(1, 1, 3, 1, 1)
+        self.mean = torch.tensor(mean).view(1, 1, 3, 1, 1)
+        self.std = torch.tensor(std).view(1, 1, 3, 1, 1)
         # assert max(std) <= 1 and min(std) >= 0\
         #     or max(mean) <= 1 and min(mean) >= 0,\
         #         "Please provide mean or std within range [0, 1]"
@@ -347,12 +347,12 @@ def repeat_tensor_rows(raw_tensor, row_repeats):
         raw_tensor: (B, *)
         row_repeats: list(int), len(row_repeats) == len(raw_tensor)
     """
-    assert len(raw_tensor) == len(raw_tensor), "Has to be the same length"
-    if sum(row_repeats) == len(row_repeats):
+    #assert len(raw_tensor) == len(raw_tensor), "Has to be the same length"
+    if row_repeats == 1:
         return raw_tensor
     else:
         indices = torch.LongTensor(
-            flat_list_of_lists([[i] * r for i, r in enumerate(row_repeats)])
+            flat_list_of_lists([[i] * r for i, r in enumerate(len(raw_tensor)*[row_repeats])])
         ).to(raw_tensor.device)
         return raw_tensor.index_select(0, indices)
 

@@ -4,11 +4,12 @@ Grid-feat-vqa
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.utils.logger import setup_logger
-from detectron2.modeling import build_model
-from detectron2.layers import FrozenBatchNorm2d
+#from detectron2.modeling import build_model
+#from detectron2.layers import FrozenBatchNorm2d
 import torch
 from torch import nn
 from src.modeling.grid_feats import add_attribute_config
+from src.modeling.resnet import build_resnet_backbone
 import os
 import horovod.torch as hvd
 
@@ -39,7 +40,7 @@ class GridFeatBackbone(nn.Module):
                  input_format="BGR"):
         super(GridFeatBackbone, self).__init__()
         self.detectron2_cfg = self.__setup__(detectron2_model_cfg)
-        self.feature = build_model(self.detectron2_cfg)
+        self.backbone = build_resnet_backbone(self.detectron2_cfg)
         self.grid_encoder = nn.Sequential(
             conv3x3(config.backbone_channel_in_size,
                     config.hidden_size),
@@ -48,7 +49,7 @@ class GridFeatBackbone(nn.Module):
         )
         self.input_format = input_format
         assert input_format == "BGR", "detectron 2 image input format should be BGR"
-        
+
         self.config = config
 
     def __setup__(self, config_file):
@@ -73,10 +74,10 @@ class GridFeatBackbone(nn.Module):
         if not os.path.exists(model_path):
             print(f"{model_path} does not exist, loading ckpt from detectron2")
             DetectionCheckpointer(
-                self.feature).resume_or_load(
+                self.backbone).resume_or_load(
                     self.detectron2_cfg.MODEL.WEIGHTS, resume=True)
         else:
-            DetectionCheckpointer(self.feature).resume_or_load(
+            DetectionCheckpointer(self.backbone).resume_or_load(
                     model_path, resume=True)
 
     @property
@@ -92,9 +93,8 @@ class GridFeatBackbone(nn.Module):
         if self.input_format == "BGR":
             # RGB->BGR, images are read in as RGB by default
             x = x[:, [2, 1, 0], :, :]
-        res5_features = self.feature.backbone(x)
-        grid_feat_outputs = self.feature.roi_heads.get_conv5_features(
-            res5_features)
+        res5_features = self.backbone(x)
+        grid_feat_outputs = res5_features # [32, 2048, 24, 24]
 
         grid = self.grid_encoder(grid_feat_outputs)  # (B * n_frm, C, H, W)
         new_c, new_h, new_w = grid.shape[-3:]

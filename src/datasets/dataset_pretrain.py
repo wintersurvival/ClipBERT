@@ -111,21 +111,31 @@ class PretrainCollator(object):
         self.is_train = is_train
 
     def collate_batch(self, batch):
-        if isinstance(batch[0]["img"], torch.Tensor):
+        if isinstance(batch["img"], torch.Tensor):
             v_collate = default_collate
         else:
             v_collate = img_collate
-        visual_inputs = v_collate([d["img"] for d in batch])  # (B, #frm=1 or T, 3, H, W)
+        visual_inputs = batch["img"]  # (B, #frm=1 or T, 3, H, W)
         # group data
-        text_examples = flat_list_of_lists([d["examples"] for d in batch])
-        n_examples_list = [d["n_examples"] for d in batch]  # (B, )
+        text_examples = batch["examples"]
+        text_str = []
+        itm_labels = []
+        if len(text_examples) > 1:
+            for i in range(len(text_examples[0]['text_str'])):
+                text_str.append(text_examples[0]['text_str'][i])
+                text_str.append(text_examples[1]['text_str'][i])
+                itm_labels.append(text_examples[0]['itm_label'][i])
+                itm_labels.append(text_examples[1]['itm_label'][i])
+        n_examples_list = batch["n_examples"]  # (B, )
+
         # group elements data
         batch_enc = self.tokenizer.batch_encode_plus(
-            [d["text_str"] for d in text_examples],
+            text_str,
             max_length=self.max_length,
             pad_to_max_length=True,
             return_tensors="pt"
         )
+
         text_input_ids = batch_enc.input_ids  # (B, L)
         if self.mlm:
             text_input_ids, mlm_labels = mask_batch_text_tokens(
@@ -134,13 +144,5 @@ class PretrainCollator(object):
         else:
             text_input_ids, mlm_labels = text_input_ids, None
         text_input_mask = batch_enc.attention_mask  # (B, L)
-        itm_labels = default_collate(
-            [d["itm_label"] for d in text_examples])  # (B, )
-        return dict(
-            visual_inputs=visual_inputs,  # (B, #frm=1 or T, H, W, C)
-            text_input_ids=text_input_ids,
-            mlm_labels=mlm_labels,
-            text_input_mask=text_input_mask,
-            itm_labels=itm_labels,
-            n_examples_list=n_examples_list  # used to create image feature copies.
-        )
+        #itm_labels = [d["itm_label"] for d in text_examples]  # (B, )
+        return visual_inputs, text_input_ids, mlm_labels, text_input_mask, torch.tensor(itm_labels), n_examples_list
