@@ -9,7 +9,7 @@ from transformers import BertConfig, BertTokenizerFast
 from src.modeling.modeling import ClipBertForPreTraining
 from src.modeling.e2e_model import ClipBert
 
-from src.datasets.dataset_pretrain import ClipBertPretrainDataset, PretrainCollator
+from src.datasets.dataset_pretrain import ClipBertPretrainDataset #, PretrainCollator
 from src.datasets.dataloader import MetaLoader, PrefetchLoader
 from src.datasets.data_utils import ImageNorm, mk_input_group
 from torch.utils.data import DataLoader
@@ -102,11 +102,14 @@ def mk_captions_pretrain_dataset(
         max_img_size=cfg.max_img_size,
         max_txt_len=cfg.max_txt_len,
         itm_neg_prob=cfg.itm_neg_prob,
+        mlm=cfg.use_mlm,
+        mlm_probability=0.15,
         use_itm=cfg.use_itm,
         fps=cfg.fps,
         num_frm=cfg.num_frm,
         frm_sampling_strategy=frm_sampling_strategy,
-        vis_format=vis_format
+        vis_format=vis_format,
+        is_train=is_train
     )
     LOGGER.info(f"[{dataset_name}] is_train {is_train} "
                 f"dataset size {len(dataset)}, "
@@ -118,12 +121,13 @@ def mk_captions_pretrain_dataset(
     sampler = DistributedSampler(
         dataset, num_replicas=hvd.size(), rank=hvd.rank(),
         shuffle=is_train)
+    '''
     data_collator = PretrainCollator(tokenizer=tokenizer,
                                      mlm=cfg.use_mlm,
                                      mlm_probability=0.15,
                                      max_length=cfg.max_txt_len,
                                      is_train=is_train)
-    '''
+
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
                             shuffle=False,
@@ -132,14 +136,14 @@ def mk_captions_pretrain_dataset(
                             pin_memory=cfg.pin_mem,
                             collate_fn=data_collator.collate_batch)
     '''
-    return dataset, data_collator
+    return dataset
 
 
 def setup_dataset(cfg, tokenizer):
     LOGGER.info("Init. train_loader and val_loader...")
     train_loaders = {}
     for db in cfg.train_datasets:
-        dataset, data_collator = mk_captions_pretrain_dataset(
+        dataset = mk_captions_pretrain_dataset(
             dataset_name=db.name, vis_format=db.vis_format,
             anno_path=db.txt, img_lmdb_dir=db.img,
             cfg=cfg, tokenizer=tokenizer, is_train=True
@@ -156,7 +160,7 @@ def setup_dataset(cfg, tokenizer):
             cfg=cfg, tokenizer=tokenizer, is_train=False
         )
     '''
-    return dataset, data_collator
+    return dataset
 
 
 def setup_model(cfg, device=None):
@@ -341,7 +345,7 @@ def start_training():
     '''
     # prepare data
     tokenizer = BertTokenizerFast.from_pretrained(cfg.tokenizer_dir)
-    dataset, data_collator = setup_dataset(cfg, tokenizer)
+    dataset = setup_dataset(cfg, tokenizer)
     #train_loader = MetaLoader(train_loaders,
     #                          accum_steps=cfg.gradient_accumulation_steps,
     #                          distributed=n_gpu > 1)
@@ -388,7 +392,11 @@ def start_training():
     # Compile model
     start_compile = time.perf_counter()
     batch = next(iter(train_loader))
-    visual_inputs, text_input_ids, mlm_labels, text_input_mask, itm_labels, n_examples_list = data_collator.collate_batch(batch)
+    visual_inputs, text_input_ids, mlm_labels, text_input_mask, itm_labels, n_examples_list = batch
+    text_input_ids = text_input_ids.view([-1, cfg.max_txt_len])
+    mlm_labels = mlm_labels.view([-1, cfg.max_txt_len])
+    text_input_mask = text_input_mask.view([-1, cfg.max_txt_len])
+    itm_labels = itm_labels.view(-1)
     print(visual_inputs.shape)
     print(text_input_ids.shape)
     print(mlm_labels.shape)
@@ -469,7 +477,15 @@ def start_training():
     for step, batch in enumerate(train_loader):
 
         # forward pass
-        loss = forward_step(cfg, poptorch_model, batch)
+        visual_inputs, text_input_ids, mlm_labels, text_input_mask, itm_labels, n_examples_list = batch
+        text_input_ids = text_input_ids.view([-1, cfg.max_txt_len])
+        mlm_labels = mlm_labels.view([-1, cfg.max_txt_len])
+        text_input_mask = text_input_mask.view([-1, cfg.max_txt_len])
+        itm_labels = itm_labels.view(-1)
+        #loss = forward_step(cfg, poptorch_model, batch)
+        if not cfg.use_itm:
+            itm_labels = None
+        loss, mlm_loss, itm_loss = poptorch_model(n_examples_list, text_input_ids, visual_inputs, text_input_mask, mlm_labels, itm_labels)
         '''
         mlm_loss, itm_loss = 0, 0
         if cfg.use_mlm:
@@ -479,17 +495,18 @@ def start_training():
             itm_loss = outputs["itm_loss"].mean()
             task2loss["itm"](itm_loss.item())
         '''
-        task2loss["loss"](loss.item())
-
-        delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
+        print(setp, loss.item(), mlm_loss.item(), itm_loss.item())
+        #task2loss["loss"](loss.item())
         '''
+        delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
+
         with amp.scale_loss(
                 loss, optimizer, delay_unscale=delay_unscale
                 ) as scaled_loss:
             scaled_loss.backward()
             zero_none_grad(model)
             optimizer.synchronize()
-        '''
+
         # optimizer
         if (step + 1) % cfg.gradient_accumulation_steps == 0:
             global_step += 1
@@ -510,7 +527,7 @@ def start_training():
                 cfg.num_train_steps, warmup_ratio=cfg.warmup_ratio,
                 decay_epochs=cfg.cnn_step_decay_epochs,
                 multi_step_epoch=n_epoch)
-
+            
             # Hardcoded param group length
             assert len(optimizer.param_groups) == 8
             for pg_n, param_group in enumerate(
@@ -530,14 +547,14 @@ def start_training():
                 global_step)
             TB_LOGGER.add_scalar(
                 "train/lr_cnn", lr_this_step_cnn, global_step)
-            '''
+
             # update model params
             if cfg.grad_norm != -1:
                 grad_norm = clip_grad_norm_(
                     amp.master_params(optimizer), cfg.grad_norm)
                 TB_LOGGER.add_scalar("train/grad_norm", grad_norm, global_step)
             TB_LOGGER.step()
-            '''
+
             # Check if there is None grad
             none_grads = [
                 p[0] for p in model.named_parameters()
@@ -548,6 +565,7 @@ def start_training():
             with optimizer.skip_synchronize():
                 optimizer.step()
                 optimizer.zero_grad()
+
             restorer.step()
             pbar.update(1)
 
@@ -556,6 +574,7 @@ def start_training():
                 LOGGER.info(f'Step {global_step}: start validation')
                 #validate(model, val_loaders, cfg)
                 model_saver.save(step=global_step, model=model)
+        '''
         if global_step >= cfg.num_train_steps:
             break
 

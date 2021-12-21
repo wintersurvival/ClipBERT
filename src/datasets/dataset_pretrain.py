@@ -24,15 +24,18 @@ class ClipBertPretrainDataset(ClipBertBaseDataset):
     """
     def __init__(self, datalist, tokenizer, img_lmdb_dir,
                  fps=3, num_frm=3, frm_sampling_strategy="rand",
-                 max_img_size=1000, max_txt_len=20, itm_neg_prob=0.5,
-                 use_itm=True, vis_format="image"):
+                 max_img_size=1000, max_txt_len=20, mlm=True, mlm_probability=0.15,
+                 itm_neg_prob=0.5, use_itm=True, vis_format="image", is_train=True):
         super(ClipBertPretrainDataset, self).__init__(
             datalist, tokenizer, img_lmdb_dir,
             fps=fps, num_frm=num_frm, frm_sampling_strategy=frm_sampling_strategy,
             max_img_size=max_img_size, max_txt_len=max_txt_len)
         self.itm_neg_prob = itm_neg_prob
+        self.mlm = mlm
+        self.mlm_probability = mlm_probability
         self.use_itm = use_itm
         self.vis_format = vis_format
+        self.is_train = is_train
 
     def __len__(self):
         return len(self.datalist)
@@ -61,11 +64,33 @@ class ClipBertPretrainDataset(ClipBertBaseDataset):
                 raise RuntimeError(f"Failed to fetch video after {num_retries} retries.")
 
         examples = [self._get_single_example(e, index) for e in examples]
-        return dict(
-            img=img_array,  # (T, C, H, W)
-            examples=examples,
-            n_examples=len(examples)  # used to create image feature copies.
-        )
+        visual_inputs = img_array  # (B, #frm=1 or T, 3, H, W)
+        # group data
+        text_str = []
+        itm_labels = []
+        n_examples_list = len(examples)  # (B, )
+        for i in range(n_examples_list):
+            text_str.append(examples[i]['text_str'])
+            itm_labels.append(examples[i]['itm_label'])
+
+        batch_enc = self.tokenizer.batch_encode_plus(
+                text_str,
+                max_length=self.max_txt_len,
+                pad_to_max_length=True,
+                return_tensors="pt"
+                )
+
+        text_input_ids =batch_enc.input_ids  # (B, L)
+        if self.mlm:
+            text_input_ids, mlm_labels = mask_batch_text_tokens(
+                text_input_ids, self.tokenizer,
+                is_train=self.is_train)  # make mlm data
+        else:
+            text_input_ids, mlm_labels = text_input_ids, None
+        text_input_mask = batch_enc.attention_mask  # (B, L)
+        #itm_labels = [d["itm_label"] for d in text_examples]  # (B, )
+        return visual_inputs, text_input_ids, mlm_labels, text_input_mask, torch.tensor(itm_labels), n_examples_list
+
 
     def _get_single_example(self, data, index):
         # sample itm

@@ -161,7 +161,7 @@ class ClipBert(nn.Module):
                                     text_input_mask,
                                     mlm_labels,
                                     itm_labels)
-        mlm_loss, itm_loss = 0, 0
+
         if mlm_labels is not None:
             mlm_loss = outputs["mlm_loss"].mean()
         if itm_labels is not None:
@@ -169,7 +169,10 @@ class ClipBert(nn.Module):
         if mlm_labels is not None and itm_labels is not None:
             loss = mlm_loss + itm_loss
         loss = poptorch.identity_loss(loss, reduction='none')
-        return loss
+        if mlm_labels is not None and itm_labels is not None:
+            return loss, mlm_loss, itm_loss
+        else:
+            return loss
 
     def load_separate_ckpt(self, cnn_weights_path=None, bert_weights_path=None):
         if cnn_weights_path:
