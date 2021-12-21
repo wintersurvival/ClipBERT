@@ -1,5 +1,6 @@
 import torch
 import poptorch
+import popart
 import time
 import random
 import pprint
@@ -284,6 +285,30 @@ def validate(model, val_loader, cfg):
     return val_log
 
 
+def recompute_model(model, recompute_checkpoints):
+    # Put recomutation checkpoint if regular expression matches
+    from torch.fx import symbolic_trace
+    traced_model = symbolic_trace(model)
+    for node in traced_model.graph.nodes:
+        name = str(node).replace('_', '/')
+        recompute_checkpoint = False
+        for checkpoint_re in recompute_checkpoints:
+            if re.fullmatch(checkpoint_re, name):
+                print(f"RECOMPUTE CHECKPOINT:{name}")
+                recompute_checkpoint = True
+                with traced_model.graph.inserting_after(node):
+                    new_node = traced_model.graph.call_function(
+                        poptorch.recomputationCheckpoint, args=(node,))
+                    node.replace_all_uses_with(new_node)
+                    new_node.args = (node,)
+                break
+        if not recompute_checkpoint:
+            print(f"RECOMPUTE:{name}")
+
+    traced_model.recompile()
+    return traced_model
+
+
 def start_training():
     cfg = shared_configs.get_pretraining_args()
     set_random_seed(cfg.seed)
@@ -327,12 +352,36 @@ def start_training():
     opts = poptorch.Options()
     opts.replicationFactor(n_gpu)
     opts.Training.gradientAccumulation(cfg.gradient_accumulation_steps)
+    opts.setExecutionStrategy(poptorch.PipelinedExecution(poptorch.AutoStage.AutoIncrement))
+ 
+    # Enable Replicated Tensor Sharding (RTS) of optimizer state
+    #  with optimizer state residing either on-chip or in DRAM
+    opts.TensorLocations.setOptimizerLocation(
+        poptorch.TensorLocationSettings()
+        # Optimizer state lives on- or off-chip
+        .useOnChipStorage(False)
+        # Shard optimizer state between replicas with zero-redundancy	
+        .useReplicatedTensorSharding(True))
+    mem_prop = {
+        f'IPU{i}': x
+        for i, x in enumerate(8*[0.2])
+    }
+    opts.setAvailableMemoryProportion(mem_prop)
+
+    # PopART options
+    opts._Popart.set("disableGradAccumulationTensorStreams", True)
+    #opts._Popart.set("autoRecomputation", int(popart.RecomputationType.Standard))
+    if True: #args.enable_half_partials:
+        opts.Precision.setPartialsType(torch.float16)
+    else:
+        opts.Precision.setPartialsType(torch.float32)
+
     #opts._Popart.set("enablePrefetchDatastreams", False) # to avoid poplar_stream_memory_allocation_error
-    print(cfg.train_batch_size, cfg.gradient_accumulation_steps)
     train_loader = poptorch.DataLoader(options=opts, dataset=dataset, batch_size=cfg.train_batch_size, num_workers=4,
                             persistent_workers=True, shuffle=True, drop_last=True, sampler=None)
     model = setup_model(cfg, device=device)
-    model.train()
+    model.half().train()
+    #model = recompute_model(model, 'add')
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
     poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
 
@@ -417,7 +466,7 @@ def start_training():
     task2loss = {t: RunningMeter(f'train_loss/{t}')
                  for t in tasks}
     task2loss["loss"] = RunningMeter('train_loss/loss')
-    for step, (task, batch) in enumerate(train_loader):
+    for step, batch in enumerate(train_loader):
 
         # forward pass
         loss = forward_step(cfg, poptorch_model, batch)

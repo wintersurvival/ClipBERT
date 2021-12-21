@@ -42,7 +42,7 @@
   "train_batch_size": 1,
   "val_batch_size": 1,
   "max_n_example_per_group": 2,
-  "gradient_accumulation_steps": 2,
+  "gradient_accumulation_steps": 17,
   "num_train_epochs": 40,
   "min_valid_steps": 100,
   "num_valid": 200,

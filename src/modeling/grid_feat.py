@@ -90,16 +90,20 @@ class GridFeatBackbone(nn.Module):
     def forward(self, x):
         bsz, n_frms, c, h, w = x.shape
         x = x.view(bsz*n_frms, c, h, w)
+        '''
         if self.input_format == "BGR":
             # RGB->BGR, images are read in as RGB by default
             x = x[:, [2, 1, 0], :, :]
+        '''
         res5_features = self.backbone(x)
-        grid_feat_outputs = res5_features # [32, 2048, 24, 24]
+        #grid_feat_outputs = res5_features # [32, 2048, 24, 24]
 
-        grid = self.grid_encoder(grid_feat_outputs)  # (B * n_frm, C, H, W)
+        grid = self.grid_encoder(res5_features)  # (B * n_frm, C, H, W)
         new_c, new_h, new_w = grid.shape[-3:]
         # if n_frms != 0:
         grid = grid.view(bsz, n_frms, new_c, new_h, new_w)  # (B, n_frm, C, H, W)
+        # temporal mean pooling
+        grid = grid.mean(1)  # (B, H, W, C)
 
-        grid = grid.permute(0, 1, 3, 4, 2)  # (B, n_frm=3, H, W, C)
+        grid = grid.permute(0, 2, 3, 1)  # (B, H, W, C)
         return grid

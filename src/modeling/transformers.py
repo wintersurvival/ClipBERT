@@ -175,15 +175,15 @@ class BertEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None\
-            else inputs_embeds.device
+        #device = input_ids.device if input_ids is not None\
+        #    else inputs_embeds.device
         if position_ids is None:
             position_ids = torch.arange(
-                seq_length, dtype=torch.long, device=device)
+                seq_length, dtype=torch.long) #, device=device)
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                input_shape, dtype=torch.long, device=device)
+                input_shape, dtype=torch.long) #, device=device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -420,8 +420,8 @@ class BertLayer(nn.Module):
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
+        #self.output_attentions = config.output_attentions
+        #self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(
             config.num_hidden_layers)])
 
@@ -436,8 +436,8 @@ class BertEncoder(nn.Module):
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            #if self.output_hidden_states:
+            #    all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
                 hidden_states, attention_mask, head_mask[i],
@@ -445,18 +445,18 @@ class BertEncoder(nn.Module):
             )
             hidden_states = layer_outputs[0]
 
-            if self.output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            #if self.output_attentions:
+            #    all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
-        if self.output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        #if self.output_hidden_states:
+        #    all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
-            outputs = outputs + (all_attentions,)
+        #if self.output_hidden_states:
+        #    outputs = outputs + (all_hidden_states,)
+        #if self.output_attentions:
+        #    outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 

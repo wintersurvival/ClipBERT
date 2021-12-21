@@ -54,6 +54,8 @@ class ClipBertPretrainDataset(ClipBertBaseDataset):
                     index = random.randint(0, len(self) - 1)
                     continue
                 else:
+                    # RGB->BGR, images are read in as RGB by default
+                    img_array = img_array[:, [2, 1, 0], :, :]
                     break
             else:
                 raise RuntimeError(f"Failed to fetch video after {num_retries} retries.")

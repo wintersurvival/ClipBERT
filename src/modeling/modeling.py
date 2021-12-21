@@ -12,7 +12,7 @@ from .transformers import (
 
 
 def get_random_sample_indices(
-        seq_len, num_samples=100, device=torch.device("cpu")):
+        seq_len, num_samples=100):
     """
     Args:
         seq_len: int, the sampled indices will be in the range [0, seq_len-1]
@@ -25,7 +25,7 @@ def get_random_sample_indices(
     """
     r = torch.rand(seq_len)
     _, sampled_indices=torch.topk(r, num_samples, dim=0, largest=True, sorted=True)
-    return sampled_indices.long()
+    return sampled_indices.int()
 
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -40,8 +40,8 @@ class VisualInputEmbedding(nn.Module):
         self.config = config
 
         # sequence embedding
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size)
+        #self.position_embeddings = nn.Embedding(
+        #    config.max_position_embeddings, config.hidden_size)
         self.row_position_embeddings = nn.Embedding(
             config.max_grid_row_position_embeddings,
             config.hidden_size)
@@ -52,6 +52,9 @@ class VisualInputEmbedding(nn.Module):
         self.LayerNorm = BertLayerNorm(
             config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.row_position_ids = torch.arange((config.max_grid_row_position_embeddings), dtype=torch.int).view(1, -1)  # (1, H, )
+        self.col_position_ids = torch.arange((config.max_grid_col_position_embeddings), dtype=torch.int).view(1, -1)  # (1, W, )
+        self.token_type_ids = torch.zeros((1, self.config.pixel_random_sampling_size), dtype=torch.int)
 
     def forward(self, grid):
         """
@@ -61,10 +64,8 @@ class VisualInputEmbedding(nn.Module):
         Returns:
 
         """
-        bsz, _, _, _, hsz = grid.shape
+        bsz, _, _, hsz = grid.shape
 
-        # temporal mean pooling
-        grid = grid.mean(1)  # (B, H, W, d)
         grid = self.add_2d_positional_embeddings(grid)  # (B, H, W, d)
         # image token sequence
         visual_tokens = grid.view(bsz, -1, hsz)  # (B, H*W, d)
@@ -76,44 +77,19 @@ class VisualInputEmbedding(nn.Module):
             sampled_indices = get_random_sample_indices(
                 seq_len=visual_tokens.shape[1],
                 num_samples=self.config.pixel_random_sampling_size,
-                device=visual_tokens.device
             )
             visual_tokens = visual_tokens.index_select(
                 dim=1, index=sampled_indices)  # (B, #samples, d)
-        visual_tokens_shape = visual_tokens.shape[:-1]  # (B, H*W)
-        device = visual_tokens.device
+        #visual_tokens_shape = visual_tokens.shape[:-1]  # (B, H*W)
 
         # image token type embeddings.
-        token_type_ids = torch.zeros(
-            visual_tokens_shape, dtype=torch.long, device=device)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        token_type_embeddings = self.token_type_embeddings(self.token_type_ids)
 
         # embeddings = visual_tokens + position_embeddings + token_type_embeddings
         embeddings = visual_tokens + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings  # (B, H*W, d)
-
-    def add_temporal_postion_embeddings(self, grid):
-        """
-        Args:
-            grid: (B, n_frms, H, W, d)
-
-        Returns:
-            (B, n_frms, H, W, d)
-        """
-        n_frms, height, width, hsz = grid.shape[-4:]
-
-        # add row-wise position embeddings
-        temporal_position_ids = torch.arange(
-            n_frms, dtype=torch.long, device=grid.device)  # (n_frms, )
-        t_position_embeddings = self.temporal_position_embeddings(
-            temporal_position_ids)  # (n_frms, d)
-        new_shape = (1, n_frms, 1, 1, hsz)  # (1, n_frms, 1, 1, d)
-        grid = grid + t_position_embeddings.view(
-            *new_shape)  # broadcast automatically
-
-        return grid
 
     def add_2d_positional_embeddings(self, grid):
         """
@@ -126,24 +102,19 @@ class VisualInputEmbedding(nn.Module):
         height, width, hsz = grid.shape[-3:]
 
         # add row-wise position embeddings
-        row_position_ids = torch.arange(
-            height, dtype=torch.long, device=grid.device)  # (H, )
         row_position_embeddings = self.row_position_embeddings(
-            row_position_ids)  # (H, d)
-        row_shape = (1, ) * (len(grid.shape) - 3) + (
-            height, 1, hsz)  # (1, *1, H, 1, d)
-        grid = grid + row_position_embeddings.view(
-            *row_shape)  # broadcast automatically
+            self.row_position_ids)  # (H, d)
+        #row_shape = (1, ) * (len(grid.shape) - 3) + (
+        #    height, 1, hsz)  # (1, *1, H, 1, d)
+        #grid = grid + row_position_embeddings.view(
+        #    *row_shape)  # broadcast automatically
 
         # add column-wise position embeddings
-        col_position_ids = torch.arange(
-            width, dtype=torch.long, device=grid.device)  # (W, )
         col_position_embeddings = self.col_position_embeddings(
-            col_position_ids)  # (W, d)
-        col_shape = (1, ) * (len(grid.shape) - 3) + (
-            1, width, hsz)  # (1, *1, 1, W, d)
-        grid = grid + col_position_embeddings.view(
-            *col_shape)  # broadcast automatically
+            self.col_position_ids)  # (W, d)
+        #col_shape = (1, ) * (len(grid.shape) - 3) + (
+        #    1, width, hsz)  # (1, *1, 1, W, d)
+        grid = grid + row_position_embeddings + col_position_embeddings  # .view(*row_shape) .view(*col_shape)  # broadcast automatically
         return grid
 
 

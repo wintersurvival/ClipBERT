@@ -6,7 +6,7 @@ import fvcore.nn.weight_init as weight_init
 import torch
 import torch.nn.functional as F
 from torch import nn
-
+import poptorch
 from detectron2.layers import Conv2d
 from src.modeling.batch_norm import FrozenBatchNorm2d
 
@@ -133,6 +133,7 @@ class BottleneckBlock(ResNetBlockBase):
             shortcut = x
 
         out += shortcut
+        #out = poptorch.recomputationCheckpoint([out])[0]
         out = F.relu_(out)
         return out
 
