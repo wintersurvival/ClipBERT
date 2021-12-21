@@ -9,7 +9,7 @@ from transformers import BertConfig, BertTokenizerFast
 from src.modeling.modeling import ClipBertForPreTraining
 from src.modeling.e2e_model import ClipBert
 
-from src.datasets.dataset_pretrain import ClipBertPretrainDataset #, PretrainCollator
+from src.datasets.dataset_pretrain import ClipBertPretrainDataset
 from src.datasets.dataloader import MetaLoader, PrefetchLoader
 from src.datasets.data_utils import ImageNorm, mk_input_group
 from torch.utils.data import DataLoader
