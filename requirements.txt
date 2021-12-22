@@ -1,0 +1,10 @@
+--find-links https://download.pytorch.org/whl/torch_stable.html
+transformers==3.4.0
+detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.10/index.html
+ujson
+easydict
+tensorboardX
+av
+lmdb
+torchvision==0.11.1+cpu
+horovod
