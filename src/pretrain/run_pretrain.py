@@ -477,6 +477,7 @@ def start_training():
         '''
         print(step, scheduler.get_last_lr()[0], loss.item(), mlm_loss.item(), itm_loss.item())
         scheduler.step()
+        poptorch_model.setOptimizer(optimizer)
         #task2loss["loss"](loss.item())
         '''
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
