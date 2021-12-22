@@ -151,7 +151,7 @@ def setup_dataloaders(cfg, poptorch_options, tokenizer):
     return train_loaders
 
 
-def setup_model(cfg, device=None):
+def setup_model(cfg):
     LOGGER.info("Setup model...")
     # has to be a BertConfig instance
     model_cfg = load_json(cfg.model_config)
@@ -186,7 +186,6 @@ def setup_model(cfg, device=None):
 
     if cfg.freeze_cnn:
         model.freeze_cnn_backbone()
-    #model.to(device)
 
     LOGGER.info("Setup model done!")
     return model
@@ -306,15 +305,13 @@ def start_training():
     set_random_seed(cfg.seed)
 
     n_gpu = hvd.size()
-    device = "cpu"
+    device = "IPU"
     #device = torch.device("cuda", hvd.local_rank())
     #torch.cuda.set_device(hvd.local_rank())
     if hvd.rank() != 0:
         LOGGER.disabled = True
     LOGGER.info(f"device: {device} n_gpu: {n_gpu}, "
                 f"rank: {hvd.rank()}, 16-bits training: {cfg.fp16}")
-
-    #optimizer = setup_e2e_optimizer(model, cfg)
 
     # Horovod: (optional) compression algorithm.compressin
     '''
@@ -365,10 +362,10 @@ def start_training():
     #val_loaders = {k: PrefetchLoader(v, img_norm)
     #               for k, v in val_loaders.items()}
 
-    model = setup_model(cfg, device=device)
+    model = setup_model(cfg)
     model.half().train()
     #model = recompute_model(model, 'add')
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+    optimizer = setup_e2e_optimizer(model, cfg)
     poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
 
     # Compile model

@@ -1,5 +1,5 @@
-from torch.optim import Adam, Adamax, SGD
-from src.optimization.adamw import AdamW
+from torch import float16, float32
+from poptorch.optim import Adam, AdamW, SGD
 
 
 def setup_optimizer(model, opts, model_type="transformer"):
@@ -16,8 +16,8 @@ def setup_optimizer(model, opts, model_type="transformer"):
 
         if opts.optim == 'adam':
             OptimCls = Adam
-        elif opts.optim == 'adamax':
-            OptimCls = Adamax
+        elif opts.optim == 'sgd':
+            OptimCls = SGD
         elif opts.optim == 'adamw':
             OptimCls = AdamW
         else:
@@ -117,14 +117,17 @@ def setup_e2e_optimizer(model, opts):
     optimizer_grouped_parameters.extend(cnn_grouped_parameters)
     if opts.optim == 'adam':
         OptimCls = Adam
-    elif opts.optim == 'adamax':
-        OptimCls = Adamax
+    elif opts.optim == 'sgd':
+        OptimCls = SGD
     elif opts.optim == 'adamw':
         OptimCls = AdamW
     else:
         raise ValueError('invalid optimizer')
-    optimizer = OptimCls(optimizer_grouped_parameters,
-                         lr=opts.learning_rate, betas=opts.betas)
+    optimizer = OptimCls(optimizer_grouped_parameters,lr=opts.learning_rate,
+                         betas=tuple(opts.betas), loss_scaling=1.0,
+                         accum_type=float16, #max_grad_norm=opts.grad_norm,
+                         first_order_momentum_accum_type=float16,
+                         second_order_momentum_accum_type=float32)
     return optimizer
 
 
