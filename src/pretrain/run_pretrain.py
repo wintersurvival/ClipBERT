@@ -23,7 +23,7 @@ from src.utils.load_save import (ModelSaver,
                                  load_state_dict_with_mismatch)
 from src.utils.load_save import E2E_TrainingRestorer as TrainingRestorer
 from src.optimization.sched import get_lr_sched
-from src.optimization.utils import setup_e2e_optimizer
+from src.optimization.utils import setup_e2e_optimizer, get_lr_scheduler
 from collections import defaultdict
 from tqdm import tqdm
 from os.path import join
@@ -399,6 +399,9 @@ def start_training():
     actual_num_valid = int(math.floor(
         1. * cfg.num_train_steps / cfg.valid_steps)) + 1
 
+    scheduler = get_lr_scheduler(optimizer, cfg.decay,
+                                 cfg.warmup_ratio, cfg.num_train_steps)
+
     # restore
     restorer = TrainingRestorer(cfg, model, optimizer)
     global_step = restorer.global_step
@@ -472,7 +475,8 @@ def start_training():
             itm_loss = outputs["itm_loss"].mean()
             task2loss["itm"](itm_loss.item())
         '''
-        print(step, loss.item(), mlm_loss.item(), itm_loss.item())
+        print(step, scheduler.get_last_lr()[0], loss.item(), mlm_loss.item(), itm_loss.item())
+        scheduler.step()
         #task2loss["loss"](loss.item())
         '''
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
