@@ -9,6 +9,7 @@ from src.datasets import decoder
 from src.datasets.data_utils import (
     ImageResize, ImagePad, image_to_tensor)
 from src.utils.load_save import LOGGER
+from src.datasets.data_utils import ImageNorm
 
 
 def get_video_decoding_kwargs(container, num_frames, target_fps,
@@ -271,7 +272,8 @@ class ClipBertBaseDataset(Dataset):
         raw_sampled_frms = raw_sampled_frms.float()
         resized_frms = self.img_resize(raw_sampled_frms)
         padded_frms = self.img_pad(resized_frms)
-        return padded_frms, video_max_pts
+        img_norm = ImageNorm(mean=cfg.img_pixel_mean, std=cfg.img_pixel_std)
+        return img_norm(padded_frms), video_max_pts
 
 
 def img_collate(imgs):

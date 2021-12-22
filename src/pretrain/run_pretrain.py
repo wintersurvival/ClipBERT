@@ -68,8 +68,8 @@ def mk_vis_txt_pair_datalist(anno_path, data_ratio=1.0,
     return grouped
 
 
-def mk_captions_pretrain_dataset(
-        dataset_name, vis_format, anno_path, img_lmdb_dir, cfg, tokenizer, is_train=True):
+def mk_captions_pretrain_dataloader(
+        dataset_name, vis_format, anno_path, img_lmdb_dir, cfg, poptorch_options, tokenizer, is_train=True):
     # make a list(dict), where each dict {vis_id: int, txt: str}
     if dataset_name == "coco_cap":
         grouped = mk_vis_txt_pair_datalist(
@@ -118,37 +118,25 @@ def mk_captions_pretrain_dataset(
     # hardcode video batch size to be 1 / num_frm of the image batch size.
     # so that video input image size could be similar to image batch size.
     batch_size = batch_size if vis_format == "image" else int(batch_size / cfg.num_frm)
+    '''
     sampler = DistributedSampler(
         dataset, num_replicas=hvd.size(), rank=hvd.rank(),
         shuffle=is_train)
     '''
-    data_collator = PretrainCollator(tokenizer=tokenizer,
-                                     mlm=cfg.use_mlm,
-                                     mlm_probability=0.15,
-                                     max_length=cfg.max_txt_len,
-                                     is_train=is_train)
-
-    dataloader = DataLoader(dataset,
-                            batch_size=batch_size,
-                            shuffle=False,
-                            sampler=sampler,
-                            num_workers=cfg.n_workers,
-                            pin_memory=cfg.pin_mem,
-                            collate_fn=data_collator.collate_batch)
-    '''
-    return dataset
+    dataloader = poptorch.DataLoader(options=poptorch_options, dataset=dataset, batch_size=cfg.train_batch_size, num_workers=4,
+                            persistent_workers=True, shuffle=True, drop_last=True, sampler=None)
+    return dataloader
 
 
-def setup_dataset(cfg, tokenizer):
+def setup_dataloaders(cfg, poptorch_options, tokenizer):
     LOGGER.info("Init. train_loader and val_loader...")
     train_loaders = {}
     for db in cfg.train_datasets:
-        dataset = mk_captions_pretrain_dataset(
+        train_loaders[db.name] = mk_captions_pretrain_dataloader(
             dataset_name=db.name, vis_format=db.vis_format,
             anno_path=db.txt, img_lmdb_dir=db.img,
-            cfg=cfg, tokenizer=tokenizer, is_train=True
+            cfg=cfg, poptorch_options=poptorch_options, tokenizer=tokenizer, is_train=True
         )
-        break
         if "ratio" in db:
             train_loaders[db.name] = (train_loaders[db.name], db.ratio)
     '''
@@ -160,7 +148,7 @@ def setup_dataset(cfg, tokenizer):
             cfg=cfg, tokenizer=tokenizer, is_train=False
         )
     '''
-    return dataset
+    return train_loaders
 
 
 def setup_model(cfg, device=None):
@@ -338,21 +326,7 @@ def start_training():
     #  Horovod: broadcast parameters & optimizer state.
     #hvd.broadcast_parameters(model.state_dict(), root_rank=0)
     #hvd.broadcast_optimizer_state(optimizer, root_rank=0)
-    '''
-    model, optimizer = amp.initialize(
-        model, optimizer, enabled=cfg.fp16, opt_level='O2',
-        keep_batchnorm_fp32=True)
-    '''
-    # prepare data
-    tokenizer = BertTokenizerFast.from_pretrained(cfg.tokenizer_dir)
-    dataset = setup_dataset(cfg, tokenizer)
-    #train_loader = MetaLoader(train_loaders,
-    #                          accum_steps=cfg.gradient_accumulation_steps,
-    #                          distributed=n_gpu > 1)
-    img_norm = ImageNorm(mean=cfg.img_pixel_mean, std=cfg.img_pixel_std)
-    #train_loader = PrefetchLoader(train_loader, img_norm)
-    #val_loaders = {k: PrefetchLoader(v, img_norm)
-    #               for k, v in val_loaders.items()}
+
     opts = poptorch.Options()
     opts.replicationFactor(n_gpu)
     opts.Training.gradientAccumulation(cfg.gradient_accumulation_steps)
@@ -379,10 +353,18 @@ def start_training():
         opts.Precision.setPartialsType(torch.float16)
     else:
         opts.Precision.setPartialsType(torch.float32)
-
     #opts._Popart.set("enablePrefetchDatastreams", False) # to avoid poplar_stream_memory_allocation_error
-    train_loader = poptorch.DataLoader(options=opts, dataset=dataset, batch_size=cfg.train_batch_size, num_workers=4,
-                            persistent_workers=True, shuffle=True, drop_last=True, sampler=None)
+
+    # prepare data
+    tokenizer = BertTokenizerFast.from_pretrained(cfg.tokenizer_dir)
+    train_loaders = setup_dataloaders(cfg, opts, tokenizer)
+    train_loader = MetaLoader(train_loaders,
+                              distributed=n_gpu > 1)
+
+    #train_loader = PrefetchLoader(train_loader, img_norm)
+    #val_loaders = {k: PrefetchLoader(v, img_norm)
+    #               for k, v in val_loaders.items()}
+
     model = setup_model(cfg, device=device)
     model.half().train()
     #model = recompute_model(model, 'add')
@@ -391,7 +373,7 @@ def start_training():
 
     # Compile model
     start_compile = time.perf_counter()
-    batch = next(iter(train_loader))
+    task, batch = next(iter(train_loader))
     visual_inputs, text_input_ids, mlm_labels, text_input_mask, itm_labels, n_examples_list = batch
     text_input_ids = text_input_ids.view([-1, cfg.max_txt_len])
     mlm_labels = mlm_labels.view([-1, cfg.max_txt_len])
@@ -407,13 +389,12 @@ def start_training():
     duration_compilation = time.perf_counter() - start_compile
 
     # compute the number of steps and update cfg
-    n_batches_in_epoch = len(train_loader)
     total_train_batch_size = int(
         n_gpu * cfg.train_batch_size *
         cfg.gradient_accumulation_steps * cfg.max_n_example_per_group)
     total_n_epochs = cfg.num_train_epochs
     cfg.num_train_steps = int(math.ceil(
-        1. * n_batches_in_epoch * total_n_epochs /
+        1. * train_loader.n_batches_in_epoch * total_n_epochs /
         (n_gpu * cfg.gradient_accumulation_steps)))
     cfg.valid_steps = int(math.ceil(
         1. * cfg.num_train_steps / cfg.num_valid /
@@ -454,7 +435,7 @@ def start_training():
     LOGGER.info(f"  Accumulate steps = {cfg.gradient_accumulation_steps}")
     LOGGER.info(f"  Total batch size = #GPUs * Single-GPU batch size * "
                 f"max_n_example_per_group * Accumulate steps [Image] = {total_train_batch_size}")
-    LOGGER.info(f"  Total #batches - single epoch = {n_batches_in_epoch}.")
+    LOGGER.info(f"  Total #batches - single epoch = {train_loader.n_batches_in_epoch}.")
     LOGGER.info(f"  Total #steps = {cfg.num_train_steps}")
     LOGGER.info(f"  Total #epochs = {total_n_epochs}.")
     LOGGER.info(f"  Validate every {cfg.valid_steps} steps, in total {actual_num_valid} times")
@@ -474,8 +455,7 @@ def start_training():
     task2loss = {t: RunningMeter(f'train_loss/{t}')
                  for t in tasks}
     task2loss["loss"] = RunningMeter('train_loss/loss')
-    for step, batch in enumerate(train_loader):
-
+    for step, (task, batch) in enumerate(train_loader):
         # forward pass
         visual_inputs, text_input_ids, mlm_labels, text_input_mask, itm_labels, n_examples_list = batch
         text_input_ids = text_input_ids.view([-1, cfg.max_txt_len])
@@ -495,7 +475,7 @@ def start_training():
             itm_loss = outputs["itm_loss"].mean()
             task2loss["itm"](itm_loss.item())
         '''
-        print(setp, loss.item(), mlm_loss.item(), itm_loss.item())
+        print(step, loss.item(), mlm_loss.item(), itm_loss.item())
         #task2loss["loss"](loss.item())
         '''
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
@@ -514,7 +494,7 @@ def start_training():
                                        for l in task2loss.values()
                                        if l.val is not None})
             n_epoch = int(1. * n_gpu * cfg.gradient_accumulation_steps *
-                          global_step / n_batches_in_epoch)
+                          global_step / train_loader.n_batches_in_epoch)
             # learning rate scheduling transformer
             lr_this_step_transformer = get_lr_sched(
                 global_step, cfg.decay, cfg.learning_rate,

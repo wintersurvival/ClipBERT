@@ -257,8 +257,8 @@ class ImageNorm(object):
     """Apply Normalization to Image Pixels on GPU
     """
     def __init__(self, mean, std):
-        self.mean = torch.tensor(mean).view(1, 1, 3, 1, 1)
-        self.std = torch.tensor(std).view(1, 1, 3, 1, 1)
+        self.mean = torch.tensor(mean).view(1, 3, 1, 1)
+        self.std = torch.tensor(std).view(1, 3, 1, 1)
         # assert max(std) <= 1 and min(std) >= 0\
         #     or max(mean) <= 1 and min(mean) >= 0,\
         #         "Please provide mean or std within range [0, 1]"

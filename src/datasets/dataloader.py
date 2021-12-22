@@ -13,7 +13,7 @@ from src.utils.distributed import any_broadcast
 
 class MetaLoader(object):
     """ wraps multiple data loader """
-    def __init__(self, loaders, accum_steps=1, distributed=False):
+    def __init__(self, loaders, distributed=False):
         assert isinstance(loaders, dict)
         self.name2loader = {}
         self.name2iter = {}
@@ -31,20 +31,16 @@ class MetaLoader(object):
             self.name2iter[n] = iter(l)
             self.sampling_pools.extend([n]*r)
         self.n_batches_in_epoch = n_batches_in_epoch
-        self.accum_steps = accum_steps
         self.distributed = distributed
-        self.step = 0
 
     def __iter__(self):
         """ this iterator will run indefinitely """
         task = self.sampling_pools[0]
         while True:
-            if self.step % self.accum_steps == 0:
-                task = random.choice(self.sampling_pools)
-                if self.distributed:
-                    # make sure all process is training same task
-                    task = any_broadcast(task, 0)
-            self.step += 1
+            task = random.choice(self.sampling_pools)
+            if self.distributed:
+                # make sure all process is training same task
+                task = any_broadcast(task, 0)
             iter_ = self.name2iter[task]
             try:
                 batch = next(iter_)
@@ -54,33 +50,6 @@ class MetaLoader(object):
                 self.name2iter[task] = iter_
 
             yield task, batch
-
-
-def move_to_cuda(batch):
-    if isinstance(batch, torch.Tensor):
-        return batch.cuda(non_blocking=True)
-    elif isinstance(batch, list):
-        new_batch = [move_to_cuda(t) for t in batch]
-    elif isinstance(batch, tuple):
-        new_batch = tuple(move_to_cuda(t) for t in batch)
-    elif isinstance(batch, dict):
-        new_batch = {n: move_to_cuda(t) for n, t in batch.items()}
-    else:
-        return batch
-    return new_batch
-
-
-def record_cuda_stream(batch):
-    if isinstance(batch, torch.Tensor):
-        batch.record_stream(torch.cuda.current_stream())
-    elif isinstance(batch, list) or isinstance(batch, tuple):
-        for t in batch:
-            record_cuda_stream(t)
-    elif isinstance(batch, dict):
-        for t in batch.values():
-            record_cuda_stream(t)
-    else:
-        pass
 
 
 class PrefetchLoader(object):
@@ -150,19 +119,3 @@ class PrefetchLoader(object):
     def __getattr__(self, name):
         method = self.loader.__getattribute__(name)
         return method
-
-
-class InfiniteIterator(object):
-    """iterate an iterable oobject infinitely"""
-    def __init__(self, iterable):
-        self.iterable = iterable
-        self.iterator = iter(iterable)
-
-    def __iter__(self):
-        while True:
-            try:
-                batch = next(self.iterator)
-            except StopIteration:
-                self.iterator = iter(self.iterable)
-                batch = next(self.iterator)
-            yield batch
