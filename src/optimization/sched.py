@@ -25,23 +25,24 @@ def multi_step_schedule(n_epoch, milestones, gamma=0.5):
     return gamma**(len(milestones)+1)
 
 
-def get_lr_sched(global_step, decay, learning_rate,
+def get_lr_sched(global_step, decay,
                  num_train_steps, warmup_ratio=0.1,
                  decay_epochs=[], multi_step_epoch=-1):
+    global_step += 1
     warmup_steps = int(warmup_ratio*num_train_steps)
     if decay == 'linear':
-        lr_this_step = learning_rate * warmup_linear(
+        lr_ratio = warmup_linear(
             global_step, warmup_steps, num_train_steps)
     elif decay == 'invsqrt':
-        lr_this_step = learning_rate * noam_schedule(
+        lr_ratio =  noam_schedule(
             global_step, warmup_steps)
     elif decay == 'constant':
-        lr_this_step = learning_rate
+        lr_ratio = 1.0
     elif decay == "multi_step":
         assert multi_step_epoch >= 0
-        lr_this_step = learning_rate * multi_step_schedule(
+        lr_ratio = multi_step_schedule(
             multi_step_epoch, decay_epochs)
-    if lr_this_step <= 0:
+    if lr_ratio <= 0:
         # save guard for possible miscalculation of train steps
-        lr_this_step = 1e-8
-    return lr_this_step
+        lr_ratio = 1e-3
+    return lr_ratio

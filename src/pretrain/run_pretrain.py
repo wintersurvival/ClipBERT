@@ -374,7 +374,7 @@ def start_training():
     total_n_epochs = cfg.num_train_epochs
     cfg.num_train_steps = int(math.ceil(
         1. * train_loader.n_batches_in_epoch * total_n_epochs /
-        (n_gpu * cfg.gradient_accumulation_steps)))
+        (n_gpu)))
     cfg.valid_steps = int(math.ceil(
         1. * cfg.num_train_steps / cfg.num_valid /
         cfg.min_valid_steps)) * cfg.min_valid_steps
@@ -388,7 +388,6 @@ def start_training():
     poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
 
     lr_lambda = partial(get_lr_sched, decay=cfg.decay,
-                        learning_rate=cfg.learning_rate,
                         num_train_steps=cfg.num_train_steps,
                         warmup_ratio=cfg.warmup_ratio,
                         decay_epochs=cfg.step_decay_epochs,
