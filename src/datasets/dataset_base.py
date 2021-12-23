@@ -182,7 +182,9 @@ class ClipBertBaseDataset(Dataset):
     """
 
     def __init__(self, datalist, tokenizer, img_lmdb_dir, fps=3, num_frm=3,
-                 frm_sampling_strategy="rand", max_img_size=-1, max_txt_len=20):
+                 frm_sampling_strategy="rand", max_img_size=-1, max_txt_len=20,
+                 img_pixel_mean=[123.675, 116.28, 103.53],
+                 img_pixel_std=[1.0, 1.0, 1.0]):
         self.fps = fps
         self.num_frm = num_frm
         self.frm_sampling_strategy = frm_sampling_strategy
@@ -199,6 +201,8 @@ class ClipBertBaseDataset(Dataset):
             img_lmdb_dir, readonly=True,
             create=False)  # readahead=not _check_distributed()
         self.txn = self.env.begin(buffers=True)
+        self.img_pixel_mean = img_pixel_mean
+        self.img_pixel_std = img_pixel_std
 
     def __len__(self):
         return len(self.datalist)
@@ -221,7 +225,8 @@ class ClipBertBaseDataset(Dataset):
         resized_img = self.img_resize(raw_img_tensor)
         transformed_img = self.img_pad(
             resized_img)  # (n_frm=1, c, h, w)
-        return transformed_img
+        img_norm = ImageNorm(mean=self.img_pixel_mean, std=self.img_pixel_std)
+        return img_norm(transformed_img)
 
     @classmethod
     def _is_extreme_aspect_ratio(cls, tensor, max_ratio=5.):
@@ -272,7 +277,7 @@ class ClipBertBaseDataset(Dataset):
         raw_sampled_frms = raw_sampled_frms.float()
         resized_frms = self.img_resize(raw_sampled_frms)
         padded_frms = self.img_pad(resized_frms)
-        img_norm = ImageNorm(mean=cfg.img_pixel_mean, std=cfg.img_pixel_std)
+        img_norm = ImageNorm(mean=self.img_pixel_mean, std=self.img_pixel_std)
         return img_norm(padded_frms), video_max_pts
 
 

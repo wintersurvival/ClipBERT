@@ -25,11 +25,15 @@ class ClipBertPretrainDataset(ClipBertBaseDataset):
     def __init__(self, datalist, tokenizer, img_lmdb_dir,
                  fps=3, num_frm=3, frm_sampling_strategy="rand",
                  max_img_size=1000, max_txt_len=20, mlm=True, mlm_probability=0.15,
-                 itm_neg_prob=0.5, use_itm=True, vis_format="image", is_train=True):
+                 itm_neg_prob=0.5, use_itm=True, vis_format="image", is_train=True,
+                 img_pixel_mean=[123.675, 116.28, 103.53],
+                 img_pixel_std=[1.0, 1.0, 1.0]):
         super(ClipBertPretrainDataset, self).__init__(
             datalist, tokenizer, img_lmdb_dir,
             fps=fps, num_frm=num_frm, frm_sampling_strategy=frm_sampling_strategy,
-            max_img_size=max_img_size, max_txt_len=max_txt_len)
+            max_img_size=max_img_size, max_txt_len=max_txt_len,
+            img_pixel_mean=img_pixel_mean,
+            img_pixel_std=img_pixel_std)
         self.itm_neg_prob = itm_neg_prob
         self.mlm = mlm
         self.mlm_probability = mlm_probability

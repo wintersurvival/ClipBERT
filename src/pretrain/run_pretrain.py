@@ -111,7 +111,9 @@ def mk_captions_pretrain_dataloader(
         num_frm=cfg.num_frm,
         frm_sampling_strategy=frm_sampling_strategy,
         vis_format=vis_format,
-        is_train=is_train
+        is_train=is_train,
+        img_pixel_mean=cfg.img_pixel_mean,
+        img_pixel_std=cfg.img_pixel_std
     )
     LOGGER.info(f"[{dataset_name}] is_train {is_train} "
                 f"dataset size {len(dataset)}, "
