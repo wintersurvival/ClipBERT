@@ -397,18 +397,20 @@ def start_training():
         if cfg.use_itm:
             itm_loss = outputs["itm_loss"].mean()
             task2loss["itm"](itm_loss.item())
-
+        print(mlm_loss.item(), itm_loss.item())
         loss = mlm_loss + itm_loss
         task2loss["loss"](loss.item())
 
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
+        '''
         with amp.scale_loss(
                 loss, optimizer, delay_unscale=delay_unscale
                 ) as scaled_loss:
             scaled_loss.backward()
             zero_none_grad(model)
             optimizer.synchronize()
-
+        '''
+        loss.div(cfg.gradient_accumulation_steps).backward()
         # optimizer
         if (step + 1) % cfg.gradient_accumulation_steps == 0:
             global_step += 1
