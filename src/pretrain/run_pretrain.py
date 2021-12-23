@@ -287,12 +287,14 @@ def start_training():
 
     model = setup_model(cfg, device=device)
     model.train()
+    '''
     print("parameters:", sum(param.numel() for param in model.parameters()))
     print("buffers:", sum(param.numel() for param in model.buffers()))
     for name, param in model.named_parameters():
         print(name, param.shape, param.numel())
     for name, param in model.named_buffers():
         print(name, param.shape, param.numel())
+    '''
     optimizer = setup_e2e_optimizer(model, cfg)
     # Horovod: (optional) compression algorithm.compressin
     compression = hvd.Compression.none
