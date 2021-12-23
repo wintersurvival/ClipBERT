@@ -18,11 +18,11 @@ class NoOp(object):
         return
 
 
-def set_random_seed(seed):
+def set_random_seed(seed, options):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    options.randomSeed(seed)
 
 
 def zero_none_grad(model):

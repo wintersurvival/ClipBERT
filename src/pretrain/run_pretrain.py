@@ -304,7 +304,6 @@ def recompute_model(model, recompute_checkpoints):
 
 def start_training():
     cfg = shared_configs.get_pretraining_args()
-    set_random_seed(cfg.seed)
 
     n_gpu = hvd.size()
     device = "IPU"
@@ -354,6 +353,7 @@ def start_training():
     else:
         opts.Precision.setPartialsType(torch.float32)
     #opts._Popart.set("enablePrefetchDatastreams", False) # to avoid poplar_stream_memory_allocation_error
+    set_random_seed(cfg.seed, opts)
 
     # prepare data
     tokenizer = BertTokenizerFast.from_pretrained(cfg.tokenizer_dir)
