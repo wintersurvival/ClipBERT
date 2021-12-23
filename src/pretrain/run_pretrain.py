@@ -303,11 +303,11 @@ def start_training():
     #  Horovod: broadcast parameters & optimizer state.
     hvd.broadcast_parameters(model.state_dict(), root_rank=0)
     hvd.broadcast_optimizer_state(optimizer, root_rank=0)
-
+    '''
     model, optimizer = amp.initialize(
         model, optimizer, enabled=cfg.fp16, opt_level='O2',
         keep_batchnorm_fp32=True)
-
+    '''
     # prepare data
     tokenizer = BertTokenizerFast.from_pretrained(cfg.tokenizer_dir)
     train_loaders, val_loaders = setup_dataloaders(cfg, tokenizer)
