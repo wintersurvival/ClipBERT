@@ -4,24 +4,6 @@ from torch import float16, float32
 from poptorch.optim import Adam, AdamW, SGD
 
 
-def get_lr_scheduler(optimizer,
-                     scheduler_type,
-                     lr_warmup=None,
-                     num_steps=None):
-    if scheduler_type == "linear":
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, int(lr_warmup * num_steps), num_steps)
-    elif scheduler_type == "constant":
-        scheduler = get_constant_schedule(optimizer)
-    else:
-        raise ValueError("Unknown scheduler_type:", scheduler_type)
-
-    # Initialize step as Poptorch does not call optimizer.step() explicitly
-    optimizer._step_count = 1
-
-    return scheduler
-
-
 def setup_optimizer(model, opts, model_type="transformer"):
     """model_type: str, one of [transformer, cnn]"""
 

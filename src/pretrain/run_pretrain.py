@@ -5,6 +5,7 @@ import time
 import random
 import pprint
 import math
+from functools import partial
 from transformers import BertConfig, BertTokenizerFast
 from src.modeling.modeling import ClipBertForPreTraining
 from src.modeling.e2e_model import ClipBert
@@ -14,6 +15,7 @@ from src.datasets.dataloader import MetaLoader, PrefetchLoader
 from src.datasets.data_utils import ImageNorm, mk_input_group
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
+from torch.optim.lr_scheduler import LambdaLR
 from src.configs.config import shared_configs
 from src.utils.misc import set_random_seed, NoOp, zero_none_grad
 from src.utils.logger import LOGGER, TB_LOGGER, add_log_to_file, RunningMeter
@@ -23,7 +25,7 @@ from src.utils.load_save import (ModelSaver,
                                  load_state_dict_with_mismatch)
 from src.utils.load_save import E2E_TrainingRestorer as TrainingRestorer
 from src.optimization.sched import get_lr_sched
-from src.optimization.utils import setup_e2e_optimizer, get_lr_scheduler
+from src.optimization.utils import setup_e2e_optimizer
 from collections import defaultdict
 from tqdm import tqdm
 from os.path import join
@@ -345,6 +347,7 @@ def start_training():
 
     # PopART options
     opts._Popart.set("disableGradAccumulationTensorStreams", True)
+    opts._Popart.set('accumulateOuterFragmentSettings.schedule', int(popart.AccumulateOuterFragmentSchedule.OverlapMemoryOptimized))
     #opts._Popart.set("autoRecomputation", int(popart.RecomputationType.Standard))
     if True: #args.enable_half_partials:
         opts.Precision.setPartialsType(torch.float16)
@@ -362,11 +365,33 @@ def start_training():
     #val_loaders = {k: PrefetchLoader(v, img_norm)
     #               for k, v in val_loaders.items()}
 
+    # compute the number of steps and update cfg
+    total_train_batch_size = int(
+        n_gpu * cfg.train_batch_size *
+        cfg.gradient_accumulation_steps * cfg.max_n_example_per_group)
+    total_n_epochs = cfg.num_train_epochs
+    cfg.num_train_steps = int(math.ceil(
+        1. * train_loader.n_batches_in_epoch * total_n_epochs /
+        (n_gpu * cfg.gradient_accumulation_steps)))
+    cfg.valid_steps = int(math.ceil(
+        1. * cfg.num_train_steps / cfg.num_valid /
+        cfg.min_valid_steps)) * cfg.min_valid_steps
+    actual_num_valid = int(math.floor(
+        1. * cfg.num_train_steps / cfg.valid_steps)) + 1
+
     model = setup_model(cfg)
     model.half().train()
     #model = recompute_model(model, 'add')
     optimizer = setup_e2e_optimizer(model, cfg)
     poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
+
+    lr_lambda = partial(get_lr_sched, decay=cfg.decay,
+                        learning_rate=cfg.learning_rate,
+                        num_train_steps=cfg.num_train_steps,
+                        warmup_ratio=cfg.warmup_ratio,
+                        decay_epochs=cfg.step_decay_epochs,
+                        multi_step_epoch=-1)
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
     # Compile model
     start_compile = time.perf_counter()
@@ -384,23 +409,6 @@ def start_training():
     print(n_examples_list.shape)
     poptorch_model.compile(n_examples_list, text_input_ids, visual_inputs, text_input_mask, mlm_labels, itm_labels)
     duration_compilation = time.perf_counter() - start_compile
-
-    # compute the number of steps and update cfg
-    total_train_batch_size = int(
-        n_gpu * cfg.train_batch_size *
-        cfg.gradient_accumulation_steps * cfg.max_n_example_per_group)
-    total_n_epochs = cfg.num_train_epochs
-    cfg.num_train_steps = int(math.ceil(
-        1. * train_loader.n_batches_in_epoch * total_n_epochs /
-        (n_gpu * cfg.gradient_accumulation_steps)))
-    cfg.valid_steps = int(math.ceil(
-        1. * cfg.num_train_steps / cfg.num_valid /
-        cfg.min_valid_steps)) * cfg.min_valid_steps
-    actual_num_valid = int(math.floor(
-        1. * cfg.num_train_steps / cfg.valid_steps)) + 1
-
-    scheduler = get_lr_scheduler(optimizer, cfg.decay,
-                                 cfg.warmup_ratio, cfg.num_train_steps)
 
     # restore
     restorer = TrainingRestorer(cfg, model, optimizer)
