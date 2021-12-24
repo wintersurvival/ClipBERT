@@ -6,6 +6,7 @@ from src.modeling.modeling import (
     ClipBertForRegression,
     ClipBertForVideoTextRetrieval)
 from src.modeling.grid_feat import GridFeatBackbone
+import torch
 from torch import nn
 from src.datasets.data_utils import repeat_tensor_rows
 from src.utils.load_save import load_state_dict_with_mismatch
@@ -162,15 +163,32 @@ class ClipBert(nn.Module):
                                     mlm_labels,
                                     itm_labels)
 
+        #mlm
         if mlm_labels is not None:
             mlm_loss = outputs["mlm_loss"].mean()
+            mlm_mask = mlm_labels != 100  # (B, Lt)  -100 is the ignored label for cross entropy
+            n_mlm_tokens = mlm_mask.sum().item()
+            n_mlm_corrects = (
+                    outputs["mlm_scores"][mlm_mask].max(
+                        dim=-1)[1] == mlm_labels[mlm_mask]).sum().item()
+            if n_mlm_tokens != 0:
+                mlm_acc = torch.tensor(float(n_mlm_corrects / n_mlm_tokens))
+
+        # itm
         if itm_labels is not None:
             itm_loss = outputs["itm_loss"].mean()
+            n_itm_ex = len(itm_labels)
+            n_itm_corrects = (
+                    outputs["itm_scores"].max(
+                        dim=-1)[1] == outputs["itm_labels"]).sum().item()
+            if n_itm_ex != 0:
+                itm_acc = torch.tensor(float(n_itm_corrects / n_itm_ex))
+
         if mlm_labels is not None and itm_labels is not None:
             loss = mlm_loss + itm_loss
         loss = poptorch.identity_loss(loss, reduction='none')
         if mlm_labels is not None and itm_labels is not None:
-            return loss, mlm_loss, itm_loss
+            return loss, mlm_loss, mlm_acc, itm_loss, itm_acc
         else:
             return loss
 

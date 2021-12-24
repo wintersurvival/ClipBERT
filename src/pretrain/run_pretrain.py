@@ -474,7 +474,8 @@ def start_training():
         #loss = forward_step(cfg, poptorch_model, batch)
         if not cfg.use_itm:
             itm_labels = None
-        loss, mlm_loss, itm_loss = poptorch_model(n_examples_list, text_input_ids, visual_inputs, text_input_mask, mlm_labels, itm_labels)
+        loss, mlm_loss, mlm_acc, itm_loss, itm_acc = poptorch_model(n_examples_list, text_input_ids, visual_inputs, text_input_mask, mlm_labels, itm_labels)
+        loss, mlm_loss, mlm_acc, itm_loss, itm_acc = loss.mean().item(), mlm_loss.mean().item(), mlm_acc.mean().item(), itm_loss.mean().item(), itm_acc.mean().item()
         '''
         mlm_loss, itm_loss = 0, 0
         if cfg.use_mlm:
@@ -484,7 +485,7 @@ def start_training():
             itm_loss = outputs["itm_loss"].mean()
             task2loss["itm"](itm_loss.item())
         '''
-        print(step, scheduler.get_last_lr()[0], loss.item(), mlm_loss.item(), itm_loss.item())
+        LOGGER.info(f"step: {step}, lr: {scheduler.get_last_lr()[0]:.2e}, mlm_loss: {mlm_loss:.3f}, mlm_acc: {mlm_acc:.3f}, itm_loss: {itm_loss:.3f}, itm_acc: {itm_acc:.3f}")
         scheduler.step()
         poptorch_model.setOptimizer(optimizer)
         #task2loss["loss"](loss.item())
