@@ -1,6 +1,6 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
-transformers==3.4.0
-detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.10/index.html
+transformers==4.10.2
+detectron2 @ git+https://github.com/facebookresearch/detectron2.git@ffff8acc35ea88ad1cb1806ab0f00b4c1c5dbfd9
 ujson
 easydict
 tensorboardX
