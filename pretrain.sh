@@ -1,4 +1,5 @@
 #!/bin/bash
+source ./setup.sh
 
 #inside the container
 

@@ -166,18 +166,22 @@ class ClipBert(nn.Module):
         #mlm
         if mlm_labels is not None:
             mlm_loss = outputs["mlm_loss"].mean()
+            mlm_labels = outputs["mlm_labels"]
             mlm_mask = mlm_labels != -100  # (B, Lt)  -100 is the ignored label for cross entropy
-            n_mlm_tokens = mlm_mask.sum()
+            n_mlm_tokens = mlm_mask.sum().float().half()
             masked_mlm_scores = outputs["mlm_scores"].view(mlm_mask.shape[0], mlm_mask.shape[1], -1).masked_fill_(~mlm_mask.unsqueeze(2), -torch.finfo(torch.float16).max)
-            n_mlm_corrects = (masked_mlm_scores.max(dim=-1)[1] == mlm_labels*mlm_mask).sum()
+            n_mlm_corrects = (masked_mlm_scores.max(dim=-1)[1] == mlm_labels).sum().float().half()
+            mlm_acc = 0
             if n_mlm_tokens != 0:
                 mlm_acc = n_mlm_corrects / n_mlm_tokens
+                print(n_mlm_corrects, n_mlm_tokens)
 
         # itm
         if itm_labels is not None:
             itm_loss = outputs["itm_loss"].mean()
             n_itm_ex = len(itm_labels)
-            n_itm_corrects = (outputs["itm_scores"].max(dim=-1)[1] == outputs["itm_labels"]).sum()
+            n_itm_corrects = (outputs["itm_scores"].max(dim=-1)[1] == outputs["itm_labels"]).sum().float().half()
+            itm_acc = 0
             if n_itm_ex != 0:
                 itm_acc = n_itm_corrects / n_itm_ex
 
