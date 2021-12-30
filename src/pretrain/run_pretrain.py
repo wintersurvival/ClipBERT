@@ -407,7 +407,6 @@ def start_training():
                         dim=-1)[1] == outputs["mlm_labels"][mlm_mask]).sum().item()
             if n_mlm_tokens != 0:
                 mlm_acc = torch.tensor(float(n_mlm_corrects / n_mlm_tokens))
-                print(n_mlm_corrects, n_mlm_tokens, n_mlm_corrects / n_mlm_tokens)
 
         # itm
         if cfg.use_itm:
