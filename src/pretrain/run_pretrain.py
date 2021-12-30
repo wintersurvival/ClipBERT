@@ -392,10 +392,10 @@ def start_training():
         outputs = forward_step(cfg, model, batch)
         mlm_loss, itm_loss = 0, 0
         if cfg.use_mlm:
-            mlm_loss = outputs["mlm_loss"].mean()
+            mlm_loss = outputs["mlm_loss"].sum()
             task2loss["mlm"](mlm_loss.item())
         if cfg.use_itm:
-            itm_loss = outputs["itm_loss"].mean()
+            itm_loss = outputs["itm_loss"].sum()
             task2loss["itm"](itm_loss.item())
         loss = mlm_loss + itm_loss
         task2loss["loss"](loss.item())
@@ -406,7 +406,8 @@ def start_training():
                     outputs["mlm_scores"][mlm_mask].max(
                         dim=-1)[1] == outputs["mlm_labels"][mlm_mask]).sum().item()
             if n_mlm_tokens != 0:
-                mlm_acc = torch.tensor(float(n_mlm_corrects / n_mlm_tokens))
+                mlm_loss = mlm_loss / n_mlm_tokens
+                mlm_acc = float(n_mlm_corrects / n_mlm_tokens)
 
         # itm
         if cfg.use_itm:
@@ -415,7 +416,8 @@ def start_training():
                     outputs["itm_scores"].max(
                         dim=-1)[1] == outputs["itm_labels"]).sum().item()
             if n_itm_ex != 0:
-                itm_acc = torch.tensor(float(n_itm_corrects / n_itm_ex))
+                itm_loss = itm_loss / n_itm_ex
+                itm_acc = float(n_itm_corrects / n_itm_ex)
         LOGGER.info(f"step: {step}, mlm_loss: {mlm_loss:.3f}, mlm_acc: {mlm_acc:.3f}, itm_loss: {itm_loss:.3f}, itm_acc: {itm_acc:.3f}")
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
         '''
