@@ -331,7 +331,7 @@ def start_training():
     opts.replicationFactor(n_gpu)
     opts.Training.gradientAccumulation(cfg.gradient_accumulation_steps)
     opts.setExecutionStrategy(poptorch.PipelinedExecution(poptorch.AutoStage.AutoIncrement))
- 
+    opts.anchorMode(poptorch.AnchorMode.All)
     # Enable Replicated Tensor Sharding (RTS) of optimizer state
     #  with optimizer state residing either on-chip or in DRAM
     opts.TensorLocations.setOptimizerLocation(
@@ -474,8 +474,22 @@ def start_training():
         #loss = forward_step(cfg, poptorch_model, batch)
         if not cfg.use_itm:
             itm_labels = None
-        loss, mlm_loss, mlm_acc, itm_loss, itm_acc = poptorch_model(n_examples_list, text_input_ids, visual_inputs, text_input_mask, mlm_labels, itm_labels)
-        loss, mlm_loss, mlm_acc, itm_loss, itm_acc = loss.mean().item(), mlm_loss.mean().item(), mlm_acc.mean().item(), itm_loss.mean().item(), itm_acc.mean().item()
+        loss, mlm_loss, itm_loss, n_mlm_tokens, n_mlm_corrects, n_itm_ex, n_itm_corrects = poptorch_model(n_examples_list,
+                                                                                                        text_input_ids,
+                                                                                                        visual_inputs,
+                                                                                                        text_input_mask,
+                                                                                                        mlm_labels,
+                                                                                                        itm_labels)
+        mlm_loss = mlm_loss.sum().item()
+        itm_loss = itm_loss.sum().item()
+        n_mlm_tokens = n_mlm_tokens.sum().item()
+        n_mlm_corrects = n_mlm_corrects.sum().item()
+        n_itm_ex = n_itm_ex.sum().item()*n_itm_corrects.shape[0]
+        n_itm_corrects = n_itm_corrects.sum().item()
+        mlm_loss = mlm_loss / n_mlm_tokens
+        mlm_acc = n_mlm_corrects / n_mlm_tokens
+        itm_loss = itm_loss / n_itm_ex
+        itm_acc = n_itm_corrects / n_itm_ex
         '''
         mlm_loss, itm_loss = 0, 0
         if cfg.use_mlm:
