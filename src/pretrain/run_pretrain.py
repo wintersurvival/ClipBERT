@@ -416,7 +416,7 @@ def start_training():
                         dim=-1)[1] == outputs["itm_labels"]).sum().item()
             if n_itm_ex != 0:
                 itm_acc = torch.tensor(float(n_itm_corrects / n_itm_ex))
-        print(mlm_loss.item(), mlm_acc.item(), itm_loss.item(), itm_acc.item())
+        LOGGER.info(f"step: {step}, mlm_loss: {mlm_loss:.3f}, mlm_acc: {mlm_acc:.3f}, itm_loss: {itm_loss:.3f}, itm_acc: {itm_acc:.3f}")
         delay_unscale = (step + 1) % cfg.gradient_accumulation_steps != 0
         '''
         with amp.scale_loss(
