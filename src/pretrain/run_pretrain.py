@@ -472,7 +472,7 @@ def start_training():
             # update model params
             if cfg.grad_norm != -1:
                 grad_norm = clip_grad_norm_(
-                    amp.master_params(optimizer), cfg.grad_norm)
+                    model.parameters(), cfg.grad_norm)
                 TB_LOGGER.add_scalar("train/grad_norm", grad_norm, global_step)
             TB_LOGGER.step()
 
