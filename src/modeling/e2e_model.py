@@ -179,7 +179,7 @@ class ClipBert(nn.Module):
         # itm
         if itm_labels is not None:
             itm_loss = outputs["itm_loss"].mean()
-            n_itm_ex = len(itm_labels)
+            n_itm_ex = len(outputs["itm_labels"])
             n_itm_corrects = (outputs["itm_scores"].max(dim=-1)[1] == outputs["itm_labels"]).sum().float().half()
             itm_acc = 0
             if n_itm_ex != 0:
