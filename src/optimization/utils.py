@@ -127,7 +127,7 @@ def setup_e2e_optimizer(model, opts):
         raise ValueError('invalid optimizer')
     optimizer = OptimCls(optimizer_grouped_parameters,lr=opts.learning_rate,
                          betas=tuple(opts.betas), loss_scaling=1.0,
-                         accum_type=float16, #max_grad_norm=opts.grad_norm,
+                         accum_type=float16, max_grad_norm=opts.grad_norm,
                          first_order_momentum_accum_type=float16,
                          second_order_momentum_accum_type=float32)
     return optimizer
