@@ -355,6 +355,7 @@ def start_training():
     else:
         opts.Precision.setPartialsType(torch.float32)
     #opts._Popart.set("enablePrefetchDatastreams", False) # to avoid poplar_stream_memory_allocation_error
+    #opts.Training.setAutomaticLossScaling(True)
     set_random_seed(cfg.seed, opts)
 
     # prepare data
