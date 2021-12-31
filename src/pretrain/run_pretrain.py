@@ -9,7 +9,7 @@ from functools import partial
 from transformers import BertConfig, BertTokenizerFast
 from src.modeling.modeling import ClipBertForPreTraining
 from src.modeling.e2e_model import ClipBert
-
+from src.modeling.batch_norm import FrozenBatchNorm2d
 from src.datasets.dataset_pretrain import ClipBertPretrainDataset
 from src.datasets.dataloader import MetaLoader, PrefetchLoader
 from src.datasets.data_utils import ImageNorm, mk_input_group
@@ -384,6 +384,9 @@ def start_training():
 
     model = setup_model(cfg)
     model.half().train()
+    for layer in model.modules():
+        if isinstance(layer, FrozenBatchNorm2d):
+            layer.float()
     #model = recompute_model(model, 'add')
     optimizer = setup_e2e_optimizer(model, cfg)
     poptorch_model = poptorch.trainingModel(model, options=opts, optimizer=optimizer)
