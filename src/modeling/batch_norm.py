@@ -40,7 +40,7 @@ class FrozenBatchNorm2d(nn.Module):
             bias = self.bias - self.running_mean * scale
             scale = scale.reshape(1, -1, 1, 1)
             bias = bias.reshape(1, -1, 1, 1)
-            return x * scale + bias
+            return x.type(torch.float32) * scale + bias
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
