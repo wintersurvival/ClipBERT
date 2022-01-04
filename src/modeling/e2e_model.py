@@ -134,11 +134,12 @@ class ClipBert(nn.Module):
             #self.cnn.grid_encoder = poptorch.BeginBlock(self.cnn.grid_encoder, f"cnn.backbone.grid_encoder", ipu_id=2)
             self.transformer.bert.embeddings = poptorch.BeginBlock(self.transformer.bert.embeddings, f"transformer.bert.embeddings", ipu_id=0)
             outline_attribute(self.transformer.bert.embeddings.LayerNorm, "embeddings")
-            self.cnn.backbone.res3[1] = poptorch.BeginBlock(self.cnn.backbone.res3[1], f"cnn.backbone.res3[1]", ipu_id=1)
+            self.cnn.backbone = poptorch.BeginBlock(self.cnn.backbone, f"cnn.backbone", ipu_id=1)
+            self.cnn.grid_encoder = poptorch.BeginBlock(self.cnn.grid_encoder, f"cnn.grid_encoder", ipu_id=2)
             for index, layer in enumerate(self.transformer.bert.encoder.layer):
                 recomputation_checkpoint(layer)
             self.transformer.bert.encoder.layer[0] = poptorch.BeginBlock(self.transformer.bert.encoder.layer[0], f"transformer.bert.encoder.layer[0]", ipu_id=2)
-            self.transformer.bert.encoder.layer[6] = poptorch.BeginBlock(self.transformer.bert.encoder.layer[6], f"transformer.bert.encoder.layer[6]", ipu_id=3)
+            self.transformer.bert.encoder.layer[4] = poptorch.BeginBlock(self.transformer.bert.encoder.layer[4], f"transformer.bert.encoder.layer[4]", ipu_id=3)
             self.transformer.bert.pooler = poptorch.BeginBlock(self.transformer.bert.pooler, "Pooler", ipu_id=0)
             self.transformer.cls = poptorch.BeginBlock(self.transformer.cls, "Classifier", ipu_id=0)
         self.retrieval = transformer_cls == ClipBertForVideoTextRetrieval
