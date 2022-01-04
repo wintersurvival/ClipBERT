@@ -49,6 +49,8 @@ class ClipBertPretrainDataset(ClipBertBaseDataset):
             # one image/video with multiple examples
             vis_id, examples = self.datalist[index]
             img_array = self._load_img(vis_id)  # tensor, (T=1, C, H, W)
+            # RGB->BGR, images are read in as RGB by default
+            img_array = img_array[:, [2, 1, 0], :, :]
         else:  # video
             num_retries = 3  # skip error videos
             for _ in range(num_retries):
