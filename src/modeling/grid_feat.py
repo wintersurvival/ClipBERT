@@ -90,11 +90,11 @@ class GridFeatBackbone(nn.Module):
     def forward(self, x):
         bsz, n_frms, c, h, w = x.shape
         x = x.view(bsz*n_frms, c, h, w)
-        '''
+
         if self.input_format == "BGR":
             # RGB->BGR, images are read in as RGB by default
             x = x[:, [2, 1, 0], :, :]
-        '''
+
         res5_features = self.backbone(x)
         #grid_feat_outputs = res5_features # [32, 2048, 24, 24]
 
