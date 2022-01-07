@@ -330,6 +330,8 @@ def start_training():
     opts = poptorch.Options()
     opts.replicationFactor(n_gpu)
     opts.Training.gradientAccumulation(cfg.gradient_accumulation_steps)
+    opts.deviceIterations(1)
+    opts.autoRoundNumIPUs(True)
     opts.setExecutionStrategy(poptorch.PipelinedExecution(poptorch.AutoStage.AutoIncrement))
     opts.anchorMode(poptorch.AnchorMode.All)
     # Enable Replicated Tensor Sharding (RTS) of optimizer state
@@ -355,6 +357,7 @@ def start_training():
     else:
         opts.Precision.setPartialsType(torch.float32)
     #opts._Popart.set("enablePrefetchDatastreams", False) # to avoid poplar_stream_memory_allocation_error
+    #opts.Precision.enableStochasticRounding(True)
     #opts.Training.setAutomaticLossScaling(True)
     set_random_seed(cfg.seed, opts)
 
