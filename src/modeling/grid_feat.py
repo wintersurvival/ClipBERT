@@ -77,8 +77,14 @@ class GridFeatBackbone(nn.Module):
                 self.backbone).resume_or_load(
                     self.detectron2_cfg.MODEL.WEIGHTS, resume=True)
         else:
-            DetectionCheckpointer(self.backbone).resume_or_load(
-                    model_path, resume=True)
+            #DetectionCheckpointer(self.backbone).resume_or_load(
+            #        model_path, resume=True)
+            model_params = torch.load(model_path, map_location='cpu')['model']
+            target_params = {}
+            for k, v in model_params.items():
+                k = k.lstrip("backbone.")
+                target_params[k] = v
+            self.backbone.load_state_dict(target_params, strict=False)
 
     @property
     def config_file(self):
